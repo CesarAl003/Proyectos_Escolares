@@ -1,0 +1,13 @@
+inicio:
+
+    varinicio:
+        ent a ;
+        ent b ;
+        ent           j ;
+    varfin;      
+    si ( a > b ) :
+        imp ( " El mayor es el primero " ) ; 
+    sino:
+        para j = a hasta b :
+            imp ( j ) ;
+fin;

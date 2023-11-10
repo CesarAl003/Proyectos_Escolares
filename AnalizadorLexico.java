@@ -43,7 +43,7 @@ public class AnalizadorLexico {
     static List<String> tDatos = Arrays.asList("ent", "dec", "cad", "guti");
     static List<String> lstErrores = new ArrayList<>();
     static int contLin = 0, inicio = 0, fin = -1;
-    static String linea, palabra, error;
+    static String linea, const_string, error;
     static boolean declaracion = false, hayError = false, haycomillas = false;
     static StringBuilder contenido = new StringBuilder(); //Para editar el archivo
     static List<token> misTokens = new ArrayList<>(); //Mis tokens
@@ -64,9 +64,7 @@ public class AnalizadorLexico {
                     inicio = comillas.end(); //Guarda el inicio y el fin
                     if (comillas.find()) {
                         fin = comillas.start();
-                        palabra = linea.substring(inicio, fin);
-                        token token = new token("const_str", palabra);
-                        misTokens.add(token);
+                        const_string = linea.substring(inicio, fin);
                     }
                     else  {
                         error = "Error léxico en la línea " + contLin  + ", faltan comillas";
@@ -76,14 +74,18 @@ public class AnalizadorLexico {
                 
                 String[] palabras = linea.split(" ");
                 for (String palabra : palabras) {         
-                    System.out.println(palabra);
-                    if (palabra.equals("\"")) haycomillas = !haycomillas;
+                    //System.out.println(palabra);
+                    if (palabra.equals("\"")) {
+                        haycomillas = !haycomillas;
+                        token token = new token("const_str", const_string);
+                        if (!haycomillas) misTokens.add(token);
+                    }
                     if (!haycomillas) {
                         if (!palabra.equals("")) {
                             if (palReserv.contains(palabra)) { //Si es una palabra reservada
                                 if (tDatos.contains(palabra)) { //Es un tipo de dato
                                     if (declaracion) { //Nos encontramos en el bloque de declaración?
-                                        token token = new token("tipo_dato", palabra); //Creamos un token de palabra reservada
+                                        token token = new token("tipo_dato", palabra);
                                         misTokens.add(token);
                                         cola.offer(palabra);
                                     }    
@@ -145,9 +147,6 @@ public class AnalizadorLexico {
                         }
                         
                     }
-                    
-                    
-                
                 }
                 fin = -1; //Para que se vuelva a habilitar el matAlf
                 String reemplazo = linea.replaceAll("\\s+", " ");
@@ -163,7 +162,7 @@ public class AnalizadorLexico {
                 contenido.append(err);
             }
             //Creamos un nuevo archivo de salida y le agregamos el contenido
-            File nuevoF = new File ("C:\\Users\\Ayums\\Desktop\\Nuevo archivo.txt");
+            File nuevoF = new File ("Salida.txt");
             FileWriter archivoSalida = new FileWriter(nuevoF);
             BufferedWriter escritor = new BufferedWriter(archivoSalida);
             escritor.write(contenido.toString());
@@ -171,7 +170,7 @@ public class AnalizadorLexico {
         } catch (Exception e) {
             System.out.println(e);
         } 
-        System.out.println("\n---------TOKENS---------");
+        /*System.out.println("\n---------TOKENS---------");
         for (token t : misTokens) {
             System.out.println("Nombre: " + t.nombre + ", Valor: " + t.valor + "\n");
         }
@@ -180,6 +179,7 @@ public class AnalizadorLexico {
             System.out.println("Tipo: " + s.tipo + ", Nombre: " + s.nombre);
         }
         System.out.println("\n---------ERRORES---------");
+        */
         for (String e: lstErrores) {
             System.out.println(e);
         }
@@ -187,7 +187,7 @@ public class AnalizadorLexico {
 
     public static void main(String[] args) {
         //Ruta del archivo
-        String ruta = "C:\\Users\\Ayums\\Desktop\\Hola.txt";
+        String ruta = "Fuente.txt";
         AbrirArchivo(ruta);
         
     }
