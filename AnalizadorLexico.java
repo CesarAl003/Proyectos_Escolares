@@ -39,7 +39,7 @@ public class AnalizadorLexico {
         return false;
     }
     
-    static List<String> palReserv = Arrays.asList("ent", "dec", "cad", "guti","inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "para", "hasta", "hacer", "mod", "div", "true","false");
+    static List<String> palReserv = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "finpara;", "mod", "div", "true", "false");
     static List<String> tDatos = Arrays.asList("ent", "dec", "cad", "guti");
     static List<String> lstErrores = new ArrayList<>();
     static int contLin = 0, inicio = 0, fin = -1;
@@ -80,35 +80,36 @@ public class AnalizadorLexico {
                         token token = new token("const_str", const_string);
                         if (!haycomillas) misTokens.add(token);
                     }
-                    if (!haycomillas) {
-                        if (!palabra.equals("")) {
-                            if (palReserv.contains(palabra)) { //Si es una palabra reservada
-                                if (tDatos.contains(palabra)) { //Es un tipo de dato
-                                    if (declaracion) { //Nos encontramos en el bloque de declaración?
-                                        token token = new token("tipo_dato", palabra);
-                                        misTokens.add(token);
-                                        cola.offer(palabra);
-                                    }    
-                                    else {
-                                        error = "Error linea " + contLin + ", tipo de dato declarado fuera de lugar" + "\n";
-                                        lstErrores.add(error);
-                                    }
+                    if (!haycomillas) { //Para evitar que revise lo que hay dentro de las comillas
+                        if (!palabra.equals("")) { //Aquí nos aseguramos de que no tome cadenas vacías
+                            if (tDatos.contains(palabra)) { //Es un tipo de dato
+                                if (declaracion) { //Nos encontramos en el bloque de declaración?
+                                    token token = new token("tipo_dato", palabra);
+                                    misTokens.add(token);
+                                    cola.offer(palabra); //Para guardar cada dato en la tabla de simbolos
+                                }    
+                                else {
+                                    error = "Error linea " + contLin + ", tipo de dato declarado fuera de lugar" + "\n";
+                                    lstErrores.add(error);
                                 }
-                                else {//Si no es un tipo de dato, es una palabra reservada cualquiera
-                                    token token = new token("palabra_clave", palabra); //Creamos un token de palabra reservada
-                                    misTokens.add(token); //Añadirmos el token a la lista
-                                    if (palabra.equals("varinicio:")) declaracion = true; //Bloque de declaraciones
-                                    if (palabra.equals("varfin;")) declaracion = false;
-                                }
-                            }    
-                            else if (Pattern.matches("^[a-z]{0,12}$|^[a-z]{1}[\\w\\-]{0,10}[a-z0-9]$|^[a-z][a-z0-9]{11}$", palabra)) { //Es un id
+                            }
+                            else if (palabra.equals ("mod") || palabra.equals("div")) { //Estas palabras reservadas en realidad son operadores aritméticos
+                                token token = new token("op_arit", palabra);
+                                misTokens.add(token);
+                            }
+                            else if (palReserv.contains(palabra)) { //Si es una palabra reservada
+                                token token = new token("palabra_clave", palabra); //Creamos un token de palabra reservada
+                                misTokens.add(token); //Añadirmos el token a la lista
+                                if (palabra.equals("varinicio:")) declaracion = true; //Bloque de declaraciones
+                                if (palabra.equals("varfin;")) declaracion = false;
+                            }
+                            else if (Pattern.matches("^[a-z]{0,12}$|^[a-z]{1}[a-z0-9\\_]{0,10}[az0-9]$|^[a-z][a-z0-9]{11}$", palabra)) { //Es un id
                                 if (declaracion) { //Aun estamos en el bloque de declaración
                                     token token = new token("id " + palabra, null); 
                                     misTokens.add(token);
-                                    //Meter id a la tabla de simbolos (GUARDADO)
-                                    if (!cola.isEmpty()) {
-                                        simbolo smb = new simbolo(cola.poll(), palabra);
-                                        tablaSimbolos.add(smb);
+                                    if (!cola.isEmpty()) { //Si la cola no esta vacía, quiere decir que hay un tipo de dato guardado
+                                        simbolo smb = new simbolo(cola.poll(), palabra); //Guardamos tipo de dato, nombre
+                                        tablaSimbolos.add(smb);//Meter id a la tabla de simbolos (GUARDADO)
                                     }
                                     else {
                                         error = "Error: Sin declaración de tipo en la línea " + contLin  + "\n";
@@ -120,27 +121,31 @@ public class AnalizadorLexico {
                                     lstErrores.add(error);
                                 }
                             }
-                            else if (Pattern.matches("[*]|[/]|[+]|[-]", palabra)) {
+                            else if (palabra.equals("=")) {
+                                token token = new token("op_asign", palabra);
+                                misTokens.add(token);
+                            }
+                            else if (Pattern.matches("[*]|[/]|[+]|[-]", palabra)) { //Operadores aritméticos
                                 token token = new token("op_arit", palabra);
                                 misTokens.add(token);
                             }
-                            else if (Pattern.matches("[<]|[>]|[=]|[==]|[<=]|[>=]", palabra)) {
+                            else if (Pattern.matches("[<]|[>]|[==]|[<=]|[>=]", palabra)) {//Operadores relacionales
                             token token = new token("op_relac", palabra);
                             misTokens.add(token);
                             }
-                            else if (Pattern.matches("^[&][&]|[\\|][\\|]|[!]$", palabra)) {
+                            else if (Pattern.matches("^[&][&]|[\\|][\\|]|[!]$", palabra)) { //Operadores lógicos
                                 token token = new token("op_log", palabra);
                                 misTokens.add(token);
                             }
-                            else if (Pattern.matches("[(]|[)]|[;]|[:]", palabra)) {
+                            else if (Pattern.matches("[(]|[)]|[;]|[:]", palabra)) { //Signos de puntuación
                                 token token = new token("signo", palabra);
                                 misTokens.add(token);
                             }
-                            else if (Pattern.matches("^[\\d]+$|^[\\d]+\\.[\\d]+$", palabra)) {
+                            else if (Pattern.matches("^[\\d]+$|^[\\d]+\\.[\\d]+$", palabra)) { //Constante numérica
                                 token token = new token("num_const", palabra);
                                 misTokens.add(token);
                             }
-                            else if (!Pattern.matches(".*\".*", palabra)) {    
+                            else if (!Pattern.matches(".*\".*", palabra)) {
                                 error = palabra + ". Error léxico en fila: " + contLin + "\n";
                                 lstErrores.add(error);
                             }
@@ -170,7 +175,7 @@ public class AnalizadorLexico {
         } catch (Exception e) {
             System.out.println(e);
         } 
-        /*System.out.println("\n---------TOKENS---------");
+        //*System.out.println("\n---------TOKENS---------");
         for (token t : misTokens) {
             System.out.println("Nombre: " + t.nombre + ", Valor: " + t.valor + "\n");
         }
@@ -179,7 +184,7 @@ public class AnalizadorLexico {
             System.out.println("Tipo: " + s.tipo + ", Nombre: " + s.nombre);
         }
         System.out.println("\n---------ERRORES---------");
-        */
+        
         for (String e: lstErrores) {
             System.out.println(e);
         }
