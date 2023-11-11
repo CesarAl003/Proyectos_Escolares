@@ -39,7 +39,7 @@ public class AnalizadorLexico {
         return false;
     }
     
-    static List<String> palReserv = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "finpara;", "mod", "div", "true", "false");
+    static List<String> palReserv = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "finpara;", "hasta", "mientras", "hacer:", "finmientras;", "mod", "div", "true", "false");
     static List<String> tDatos = Arrays.asList("ent", "dec", "cad", "guti");
     static List<String> lstErrores = new ArrayList<>();
     static int contLin = 0, inicio = 0, fin = -1;
