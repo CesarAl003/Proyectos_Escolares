@@ -39,11 +39,14 @@ public class AnalizadorLexico {
         return false;
     }
     
-    static List<String> palReserv = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "finpara;", "hasta", "mientras", "hacer:", "finmientras;", "mod", "div", "true", "false");
-    static List<String> tDatos = Arrays.asList("ent", "dec", "cad", "guti");
-    static List<String> lstErrores = new ArrayList<>();
+    static List<String> palReserv = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "contando", "finpara;", "mientras", "hacer:", "finmientras;", "mod", "div");
+    static List<String> tDatos = Arrays.asList("ent", "dec", "cad");
+    static List<String> etiquetas = Arrays.asList("inicio:", "fin;", "varinicio:", "varfin;", "sino:", "finsi;" , "finpara;", "finmientras;");
+    static List<String> errLex = new ArrayList<>();
+    static List<String> errSintac = new ArrayList<>();
+    static List<Integer> indices = new ArrayList<>();
     static int contLin = 0, inicio = 0, fin = -1;
-    static String linea, const_string, error;
+    static String linea, const_string;
     static boolean declaracion = false, hayError = false, haycomillas = false;
     static StringBuilder contenido = new StringBuilder(); //Para editar el archivo
     static List<token> misTokens = new ArrayList<>(); //Mis tokens
@@ -66,10 +69,7 @@ public class AnalizadorLexico {
                         fin = comillas.start();
                         const_string = linea.substring(inicio, fin);
                     }
-                    else  {
-                        error = "Error léxico en la línea " + contLin  + ", faltan comillas";
-                        lstErrores.add(error);
-                    }
+                    else errLex.add("Error léxico en la línea " + contLin  + ", faltan comillas\n");
                 }
                 
                 String[] palabras = linea.split(" ");
@@ -88,10 +88,7 @@ public class AnalizadorLexico {
                                     misTokens.add(token);
                                     cola.offer(palabra); //Para guardar cada dato en la tabla de simbolos
                                 }    
-                                else {
-                                    error = "Error linea " + contLin + ", tipo de dato declarado fuera de lugar" + "\n";
-                                    lstErrores.add(error);
-                                }
+                                else errLex.add("Error linea " + contLin + ", tipo de dato declarado fuera de lugar\n");
                             }
                             else if (palabra.equals ("mod") || palabra.equals("div")) { //Estas palabras reservadas en realidad son operadores aritméticos
                                 token token = new token("op_arit", palabra);
@@ -111,14 +108,12 @@ public class AnalizadorLexico {
                                         simbolo smb = new simbolo(cola.poll(), palabra); //Guardamos tipo de dato, nombre
                                         tablaSimbolos.add(smb);//Meter id a la tabla de simbolos (GUARDADO)
                                     }
-                                    else {
-                                        error = "Error: Sin declaración de tipo en la línea " + contLin  + "\n";
-                                        lstErrores.add(error);
+                                    else if (!buscarSmb(tablaSimbolos, palabra)) { //Ya lo hemos guardado en la tabla de simbolos, estamos reutilizando variables
+                                        errLex.add("Error: Sin declaración de tipo en la línea " + contLin  + "\n");
                                     }
                                 } //Si ya no estamos en el bloque de declaración
                                 else if (!buscarSmb(tablaSimbolos, palabra)) { //Debe comprobar si el simbolo esta guardado en la tabla de simbolos
-                                    error = palabra + ". Error: Símbolo no encontrado en la línea " + contLin  + "\n";
-                                    lstErrores.add(error);
+                                    errLex.add(palabra + ". Error: Símbolo no encontrado en la línea " + contLin  + "\n");
                                 }
                             }
                             else if (palabra.equals("=")) {
@@ -129,11 +124,11 @@ public class AnalizadorLexico {
                                 token token = new token("op_arit", palabra);
                                 misTokens.add(token);
                             }
-                            else if (Pattern.matches("[<]|[>]|[==]|[<=]|[>=]", palabra)) {//Operadores relacionales
+                            else if (Pattern.matches("<>|==|<=|>=|<|>", palabra)) {//Operadores relacionales
                             token token = new token("op_relac", palabra);
                             misTokens.add(token);
                             }
-                            else if (Pattern.matches("^[&][&]|[\\|][\\|]|[!]$", palabra)) { //Operadores lógicos
+                            else if (Pattern.matches("^[&][&]|[\\|][\\|]$", palabra)) { //Operadores lógicos
                                 token token = new token("op_log", palabra);
                                 misTokens.add(token);
                             }
@@ -146,54 +141,60 @@ public class AnalizadorLexico {
                                 misTokens.add(token);
                             }
                             else if (!Pattern.matches(".*\".*", palabra)) {
-                                error = palabra + ". Error léxico en fila: " + contLin + "\n";
-                                lstErrores.add(error);
+                                errLex.add(palabra + ". Error léxico en fila: " + contLin + "\n");
                             }
                         }
-                        
                     }
                 }
                 fin = -1; //Para que se vuelva a habilitar el matAlf
-                String reemplazo = linea.replaceAll("\\s+", " ");
+                String remplazo = linea.replaceAll("\\s+", " ");
+                
                 //Guarda cada linea si no esta vacía
-                if (!linea.trim().isEmpty()) contenido.append(reemplazo).append("\n");
+                if (!linea.trim().isEmpty()) {
+                    indices.add(contLin);
+                    if (remplazo.charAt(0) == ' ') remplazo = remplazo.replaceFirst(" ", "");
+                    if (remplazo.charAt(remplazo.length()-1) == ' ') remplazo = remplazo.replaceAll("\\s+$", "");
+                    contenido.append(remplazo).append("\n");
+                }    
             }
             
             // Cierra el archivo
             lector.close();
             //Agregar errores al final del archivo de salida
             contenido.append("\n");
-            for (String err : lstErrores) {
+            for (String err : errLex) {
                 contenido.append(err);
             }
             //Creamos un nuevo archivo de salida y le agregamos el contenido
-            File nuevoF = new File ("Salida.txt");
+            File nuevoF = new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
             FileWriter archivoSalida = new FileWriter(nuevoF);
             BufferedWriter escritor = new BufferedWriter(archivoSalida);
             escritor.write(contenido.toString());
             escritor.close();
         } catch (Exception e) {
             System.out.println(e);
-        } 
-        //*System.out.println("\n---------TOKENS---------");
+        }
+        for (int i : indices) {
+            System.out.println(i);
+        }
+        /*System.out.println("\n---------TOKENS---------");
         for (token t : misTokens) {
             System.out.println("Nombre: " + t.nombre + ", Valor: " + t.valor + "\n");
         }
+        
         System.out.println("\n---------SIMBOLOS---------");
         for (simbolo s: tablaSimbolos) {
             System.out.println("Tipo: " + s.tipo + ", Nombre: " + s.nombre);
-        }
-        System.out.println("\n---------ERRORES---------");
-        
-        for (String e: lstErrores) {
+        }*/
+
+        //System.out.println("\n---------ERRORES---------");
+        for (String e: errLex) {
             System.out.println(e);
         }
     }
 
     public static void main(String[] args) {
-        //Ruta del archivo
-        String ruta = "Fuente.txt";
+        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
         AbrirArchivo(ruta);
-        
     }
 }
