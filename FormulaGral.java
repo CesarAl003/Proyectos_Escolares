@@ -1,4 +1,4 @@
-    /*
+/*
 Gutiérrez García Cesar Alejandro
 Determinar las raices de una ecuacion cuadrática, sean reales o complejas.
 */
