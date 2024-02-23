@@ -1,0 +1,7 @@
+syn01 Código fuera de bloque
+syn02 Error de sintaxis, verificar expresión
+syn03 ID declarado fuera del bloque de declaración
+syn04 ID sin tipo de dato
+syn05 ID repetido
+syn06 Comillas faltantes
+lex01 Token no valido
