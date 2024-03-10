@@ -1,4 +1,4 @@
-import java.io.BufferedReader; //Usa split mediante los espacios en blanco
+import java.io.BufferedReader;
 import java.util.LinkedList;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Queue;
+import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,13 +16,17 @@ public class Compilador {
     public static class simbolo {
         public String tipo;
         public String nombre;
-        public boolean esNulo;
 
         public simbolo () {
             this.tipo = "";
             this.nombre = "";
-            this.esNulo = true;
         }
+
+        public simbolo (String tipo, String nombre) {
+            this.tipo = tipo;
+            this.nombre = nombre;
+        }
+        
     }
 
     public static class error {
@@ -36,24 +41,58 @@ public class Compilador {
         }
     }
 
-    static List<simbolo> tabSim = new ArrayList<>();
-    public static boolean buscarSmb (String nombre) { // Utilizar los metodos de arraylist en lugar de este metodo
-        for (simbolo smb : tabSim) { //Comprobar si el símbolo esta guardado
-            if (smb.nombre.equals(nombre)) return true;
+    public static class etiqueta {
+        public String nombre;
+        public int linea;
+
+        public etiqueta (String nombre, int linea) {
+            this.nombre = nombre;
+            this.linea = linea;
         }
-        return false;
     }
+
+    static List<simbolo> tabSim = new ArrayList<>();
+    public static simbolo buscarSmb (String nombre) { // Utilizar los metodos de arraylist en lugar de este metodo
+        for (simbolo smb : tabSim) { //Comprobar si el símbolo esta guardado
+            if (smb.nombre.equals(nombre)) return smb;
+        }
+        return null;
+    }
+
+    static String linea, nuevaLinea = "", cte_ent = "(\\d)+";
+    static String cte_dec = cte_ent + "\\." + cte_ent;
+    static String cte_cad = "(\" [^\\\"]* \")|(\" \")";
+    static String id = "^[a-z]{0,12}$|^[a-z]{1}[a-z0-9\\_]{0,10}[a-z0-9]$|^[a-z][a-z0-9]{11}$";
+    static String op_arit = "\\*|/|\\+|-|mod|div";
     
+    public static void comprobarTipos (String[] palabras, int contLin) {
+        for (int i = 3; i < palabras.length - 1; i++) {
+            if (!Pattern.matches(op_arit, palabras[i]))
+            if (!Pattern.matches(cte_ent, palabras[i])) {
+                if (Pattern.matches(id, palabras[i])) {
+                    simbolo simb = buscarSmb(palabras[i]);
+                    if (simb != null)
+                    if (!buscarSmb(palabras[i]).tipo.equals("ent"))
+                        tabErr.add(new error("sem04", contLin, palabras[i]));
+                }
+                else tabErr.add(new error("sem04", contLin, palabras[i]));
+            }
+        }
+    }
+
     public static void AbrirArchivo (String ruta) {
         List<String> palReserv = Arrays.asList("ent", "dec", "cad", "inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "contando", "finpara;", "mientras", "hacer:", "finmientras;", "mod", "div");
         List<error> tabErr = new ArrayList<>();
-        String miAlf = "[*]|[/]|[+]|[-]|[=]|[<>]|[==]|[<=]|]>=]|[<|>]|[(]|[)]|[;]|[:]|(^[&][&]|[\\|][\\|]$)|(^[\\d]+$|^[\\d]+\\.[\\d]+$)";
+        LinkedList<String> constCad = new LinkedList<>();
         List<Integer> indices = new ArrayList<>(); //Para guardar las lineas que si contienen información
-        int contLin = 0;
-        String linea;
-        boolean declaracion = false, bloque = false, haycomillas = false;
-        
+        Stack<etiqueta> pilaSem = new Stack<>();
         simbolo smb = new simbolo();
+        String miAlf = "[*]|[/]|[+]|[-]|[=]|(<>)|(==)|(<=)|(>=)|[<|>]|[(]|[)]|[;]|[:]|(^[&][&]|[\\|][\\|]$)|(^[\\d]+$|^[\\d]+\\.[\\d]+$)";
+        boolean declaracion = false, haycomillas = false, hayInicio = false, hayVarInicio = false;
+        int contLin = 0;
+        Pattern patCad = Pattern.compile(cte_cad);
+
+        
 
         try { // Abre el archivo para lectura
             BufferedReader lector = new BufferedReader(new FileReader(ruta)); // Crea un BufferedReader para leer líneas
@@ -63,11 +102,11 @@ public class Compilador {
 
             while ((linea = lector.readLine()) != null) {
                 contLin++; // Cuenta cada línea
+
                 // Si la linea esta vacia, el string palabras es un array de cero posiciones (vacio), sino, es un array de palabras separadas por uno o más espacios en blanco
                 String[] palabras = linea.trim().isEmpty() ? new String[0] : linea.trim().split("\\s+");
                 
                 for (String palabra : palabras) { // System.out.println(palabra);
-              
                     if (palabra.equals("\"")) haycomillas = !haycomillas;
                     else if (!haycomillas) { // Evitar que considere lo que está entre comillas
                         if (Pattern.matches("ent|dec|cad", palabra)) { // Es un tipo de dato
@@ -78,25 +117,27 @@ public class Compilador {
                             if (palabra.equals("varinicio:")) declaracion = true; // Bloque de declaraciones
                             if (palabra.equals("varfin;")) declaracion = false;
                         }
-                        else if (Pattern.matches("^[a-z]{0,12}$|^[a-z]{1}[a-z0-9\\_]{0,10}[a-z0-9]$|^[a-z][a-z0-9]{11}$", palabra)) { //Es un id
-                            if (declaracion) { // Aun estamos en el bloque de declaración?
-                                if (buscarSmb(palabra)) { //No se admiten ID con nombre repetido
-                                    tabErr.add(new error("syn05", contLin, palabra));
+                        else if (Pattern.matches(id, palabra)) { //Es un id
+                            if (buscarSmb(palabra) == null) {
+                                if (declaracion) { // Aun estamos en el bloque de declaración?
+                                    if (!smb.tipo.equals("")) { // El ID tiene un tipo?
+                                        smb.nombre = palabra; // Si tiene un valor asignado, marcamos que no es nulo
+                                        tabSim.add(smb); // Una vez completo, guardamos el simbolo y lo limpiamos
+                                        smb = new simbolo();
+                                    }
+                                    else tabErr.add(new error("lex00", contLin, palabra)); // Falta el tipo de dato
                                 }
-                                else if (!smb.tipo.equals("")) { // El ID tiene un tipo?
-                                    smb.nombre = palabra; // Si tiene un valor asignado, marcamos que no es nulo
-                                    if (Pattern.matches(".*=.*", linea)) smb.esNulo = false;
-                                    tabSim.add(smb); // Una vez completo, guardamos el simbolo y lo limpiamos
+                                else tabErr.add(new error("lex00", contLin, palabra)); // Simb no encontrado
+                            } // Nos encontramos un ID que exisite y estamos en el bloque de declaración
+                            else if (declaracion) {
+                                if (!smb.tipo.equals("")) {
+                                    tabErr.add(new error("sem03", contLin, palabra)); // El simb no se está utilizando en una asignación, por lo tanto esta repetido
                                     smb = new simbolo();
                                 }
-                                else tabErr.add(new error("syn04", contLin, palabra)); // Falta el tipo de dato
-                            } // Si ya no estamos en el bloque de declaración
-                            else if (!buscarSmb(palabra)) { // Ya lo hemos guardado en la tabla de simbolos?
-                                tabErr.add(new error("lex01", contLin, palabra)); // Palabra es el simb no encontrado
                             }
                         }
                         else if (!Pattern.matches(miAlf, palabra)) { // No coincidió con ningún patron
-                            tabErr.add(new error("lex01", contLin, palabra));
+                            tabErr.add(new error("lex00", contLin, palabra));
                         }
                     }
                 }
@@ -105,10 +146,26 @@ public class Compilador {
                     haycomillas = false;
                 }
 
-                
                 if (!linea.trim().isEmpty()) { // Si la linea no esta vacia
                     indices.add(contLin); // Guarda los indices de las lineas que sí tienen info
-                    escritor.write(linea.trim().replaceAll("\\s+", " ") + "\n"); // Elimina todos los espacios en blanco y escribe la linea
+
+                    // Guardar las constantes de tipo cad
+                    Matcher matCad = patCad.matcher(linea);
+                    while (matCad.find()) constCad.offer(matCad.group(0));
+                    
+                    if (!constCad.isEmpty()) {
+                        String[] laOtraParte = linea.split(cte_cad);
+                        
+                        for (String parte : laOtraParte) {
+                            nuevaLinea += parte.replaceAll("\\s+", " ");
+                            if (!constCad.isEmpty()) nuevaLinea += constCad.poll();
+                        }
+                        nuevaLinea = nuevaLinea.trim();
+                        
+                    }
+                    else nuevaLinea = linea.trim().replaceAll("\\s+", " ");
+                    escritor.write(nuevaLinea + "\n"); // Elimina todos los espacios en blanco y escribe la linea
+                    nuevaLinea = "" ;
                 }
             }
             
@@ -118,59 +175,183 @@ public class Compilador {
         } catch (Exception e) {
             System.out.println(e);
         }
-        //Analisis sintáctico
-        
-        String letra = "a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z";
-        String digito = "0|1|2|3|4|5|6|7|8|9";
-        String tipo = "ent|dec|cad";
-        String op_arit = "\\*|/|\\+|-|mod|div";
-        String op_rel = ">=|<=|==|<>|<|>";
-        String op_log = "(&&)|(\\|\\|)";
-        String id = "(?!" + String.join("|", palReserv) + ")(" + letra + ")(_*(" + letra + "|" + digito + ")+)*"; 
-        String cte_ent = "(" + digito + ")+";
-        String cte_dec = cte_ent + "\\." + cte_ent;
-        String cte_cad = "\"([^\"]*)\"";
-        String cte = "(" + cte_ent + ")" + "|" + "(" + cte_dec + ")" + "|" + "(" + cte_cad + ")";
-        String num = cte_ent + "|" + id;
-        String operando = id + "|" + cte;
-        String condicional = "((" + operando + ") (" + op_rel + ") (" + operando + "))( (" + op_log + ") (" + operando + ") (" + op_rel + ") (" + operando + "))*" ;
-        String operacion = "((" + operando + ") (" + op_arit + ") (" + operando + "))( (" + op_arit + ") (" + operando + "))*";
-        String expresion = "(" + operando + ")( \\+ (" + operando + "))*";
-        String asign = "(" + id + ") = (" + operando + ") ;|(" + id + ") = (" + operacion + ") ;";
-        String imp = "imp \\( (" + expresion + ") \\) ;";
-        String esc = id + " = " + "esc \\( (" + cte_cad + ") \\) ;";
-        String si = "si \\( (" + condicional + ") \\) :";
-        String para = "para (" + id + ") = (" + num + ") hasta (" + num + ")( contando (" + num + "))? :";
-        String mientras = "mientras \\( (" + condicional + ") \\) hacer:";
-        String declara = "((" + tipo + ") ((" + id + ") ;|(" + asign +")))?";
-        String sentencias = "((" + asign + ")|(" + imp + ")|(" + esc + ")|(" + si + ")|(sino:)|(" + para + ")|(" + mientras + ")|(finsi;)|(finpara;)|(finmientras;)|(" + declara +")|(varinicio:)|(varfin;))*";
-      
-        if (tabErr.isEmpty()) {
-            contLin = 0;
-            try {
-                FileReader archivoSalida = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
-                BufferedReader lector = new BufferedReader(archivoSalida); // Crea un BufferedReader para leer líneas
+        contLin = 0; 
+        try { // syn
+            BufferedReader lector = new BufferedReader(new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt"));
+            BufferedReader regex = new BufferedReader (new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\regex.txt"));
+            String sentencias = regex.readLine(); // Mi gramatica
+            regex.close();
+            
+            while ((linea = lector.readLine()) != null) {
+                contLin++; // Cuenta cada línea
+                if (linea.equals("inicio:")) {
+                        if (hayInicio) tabErr.add(new error("syn00", indices.get(contLin - 1), linea));
+                        else hayInicio = true;
+                }
+                else if (linea.equals("fin;")) hayInicio = false;
+                else if (hayInicio) {
+                    if (linea.equals("varinicio:")) {
+                        if (contLin != 2) tabErr.add(new error("syn05", indices.get(contLin - 1), ""));
+                        if (hayVarInicio) tabErr.add(new error("syn00", indices.get(contLin - 1), linea));
+                        else hayVarInicio = true;
+                    }
+                    else if (!Pattern.matches(sentencias, linea)) tabErr.add(new error("syn02", indices.get(contLin - 1), linea));   
+                }
+                else {
+                    tabErr.add(new error("syn01", indices.get(contLin - 1), ""));
+                    break; // Ya no tiene caso seguir si no hay inicio:
+                }
+                
+            }
+            lector.close();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+        contLin = 0;
+        try { // Sem
+            FileReader archivoSalida = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
+            BufferedReader lector = new BufferedReader(archivoSalida); // Crea un BufferedReader para leer líneas
+            etiqueta et = null;
+            
+            while ((linea = lector.readLine()) != null) {
+                contLin++;
+                String[] palabras = linea.split("\\s");
+                
+                    switch (palabras[0]) {
+                        case "inicio:": 
+                            pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                            break;
+                        case "varinicio:": 
+                            pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                            break;
+                        case "ent":
+                            if (palabras.length > 3 && palabras[2].equals("=")) comprobarTipos(palabras, contLin);
+                            else {
+                                if (!buscarSmb(palabras[1]).tipo.equals("ent")) tabErr.add(new error("sem04", contLin, palabras[1]));
+                            }
+                            break;
+                        case "dec":
+                            if (palabras.length > 3 && palabras[2].equals("=")) {
+                                for (int i = 3; i < palabras.length - 1; i++) {
+                                    if (!Pattern.matches(op_arit, palabras[i]))
+                                    if (!Pattern.matches(cte_dec, palabras[i])) {
+                                        if (Pattern.matches(id, palabras[i])) {
+                                            simbolo simb = buscarSmb(palabras[i]);
+                                            if (simb != null)
+                                            if (!buscarSmb(palabras[i]).tipo.equals("dec"))
+                                                tabErr.add(new error("sem04", contLin, palabras[i]));
+                                        }
+                                        else tabErr.add(new error("sem04", contLin, palabras[i]));
+                                    }
+                                }
+                            }
+                            break;
+                        case "cad":
+                            if (palabras.length > 3 && palabras[2].equals("=")) {
+                                // Para verificar que solo se usen '+' y no otros operadores aritmeticos
+                                for (int i = 3; i < palabras.length - 1; i++) {
+                                    if (Pattern.matches(op_arit, palabras[i])) {
+                                        if (!palabras[i].equals("+")) tabErr.add(new error("sem05", contLin, linea));
+                                    } // Para verificar que los simbolos sean de tipo cad
+                                    else if (palabras[i].equals("\"")) haycomillas = !haycomillas;
+                                    else if (Pattern.matches(id, palabras[i])) {
+                                            simbolo simb = buscarSmb(palabras[i]);
+                                            if (simb != null)
+                                            if (!buscarSmb(palabras[i]).tipo.equals("cad"))
+                                                tabErr.add(new error("sem04", contLin, palabras[i]));
+                                    }
+                                    else if (!haycomillas) {
+                                        if (Pattern.matches(cte_ent, palabras[i]) || Pattern.matches(cte_dec, palabras[i])) {
+                                            tabErr.add(new error("sem04", contLin, palabras[i]));
+                                        }
+                                    }
+                                    Matcher matCad = patCad.matcher(linea);
+                                    while (matCad.find()) { // Para verificar que las constantes cad sean válidas
+                                        String cteString = matCad.group(0);
+                                        if (!Pattern.matches(cte_cad, cteString))
+                                            tabErr.add(new error("sem04", contLin, cteString));
+                                    }
+                                }
+                            }
+                            break;
+                        case "varfin;" : 
+                            if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "varfin;"));
+                            else {
+                                et = pilaSem.pop();
+                                if (!et.nombre.equals("varinicio:")) tabErr.add(new error("sem00", et.linea, "varinicio:"));
+                            }
+                            break;
 
-                while ((linea = lector.readLine()) != null) {
-                    contLin++; // Cuenta cada línea
-                    if (linea.equals("inicio:")) bloque = true;
-                    else if (linea.equals("fin;")) bloque = false;
-                    else if (bloque) {
-                        if (!Pattern.matches(sentencias, linea)) {
-                            tabErr.add(new error("syn02", indices.get(contLin - 1), linea));
+                        case "imp":  break;
+                        case "si": 
+                            pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                            break;
+
+                        case "finsi;": 
+                            if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "finsi;"));
+                                else {et = pilaSem.pop();
+                                if (!et.nombre.equals("si")) tabErr.add(new error("sem00", et.linea, et.nombre));
+                            }
+                            break;
+                        
+                        case "para": 
+                            pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                            break;
+
+                        case "finpara;": 
+                            if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "finpara;"));
+                            else {
+                                et = pilaSem.pop();
+                                if (!et.nombre.equals("para")) tabErr.add(new error("sem00", et.linea,  et.nombre));
+                            }
+                            break;
+
+                        case "mientras": 
+                            pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                            break;
+                        case "finmientras;":
+                            if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "finmientras;"));
+                            else {
+                                et = pilaSem.pop();
+                                if (!et.nombre.equals("mientras")) tabErr.add(new error("sem00", et.linea,  et.nombre));
+                            }
+                            break;
+
+                        case "fin;":  
+                            if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "varfin;"));
+                            else {
+                                et = pilaSem.pop();
+                                if (!et.nombre.equals("inicio:")) tabErr.add(new error("sem00", et.linea,  et.nombre));
+                            }
+                            break;
+                    }
+
+                    if (palabras.length > 1) 
+                    switch (palabras[1]) {
+                        case "=": {
+                            if (palabras.length > 2) 
+                            if (palabras[2].equals("esc")) System.out.print("esc");
+                            else {
+                                String tipo = buscarSmb(palabras[0]).tipo;
+                                System.out.println(tipo);
+                            }
                         }
                     }
-                    else {
-                        tabErr.add(new error("syn01", contLin, linea));
-                    }
-                }
-
-                lector.close();
-            } catch (Exception e) {
-                System.out.println(e);
+                    if (linea.equals("fin;")) break;
+                
             }
+            // Las etiquetas restantes en la pila son errores
+            for (etiqueta e: pilaSem) {
+                tabErr.add(new error("sem00", e.linea,  e.nombre));
+            }
+                
+            lector.close();
+
+        } catch (Exception e) {
+            System.out.println(e);
         }
-        try {
+
+        try {// Errores
             FileReader errores = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\errDesc.txt");
             BufferedReader lector = new BufferedReader(errores); // Crea un BufferedReader para leer líneas
            
@@ -181,11 +362,10 @@ public class Compilador {
                 errDesc.add(error);
             }
             lector.close();
-            System.out.println("\n---------Errores---------");
             for (error e: tabErr) {
                 for (String ln : errDesc) {
                     if (e.codigo.equals(ln.substring(0,5))){
-                        System.out.println("Error: " + e.codigo + ", linea: " + e.linea + ": " + e.token + "\n" + ln.substring(6, ln.length()) + "\n");
+                        System.out.println("Error " + e.codigo + ", linea: " + e.linea + ": " + e.token + " \n" + ln.substring(6, ln.length()) + "\n");
                     }
                 }               
             }
@@ -193,12 +373,11 @@ public class Compilador {
         } catch (Exception e) {
             System.out.println(e);
         }
-        
-        
-        System.out.println("\n---------SIMBOLOS---------");
+        /*
         for (simbolo s: tabSim) {
-            System.out.println(s.nombre + " de tipo " + s.tipo + ", Es nulo: " + s.esNulo);
-        }  
+            System.out.println(s.nombre + " de tipo " + s.tipo);
+        }   */
+        
     }
 
     public static void main(String[] args) {
@@ -206,179 +385,3 @@ public class Compilador {
         AbrirArchivo(ruta);
     }
 }
-
-/*import java.io.BufferedReader; //Usa split mediante los espacios en blanco
-import java.util.LinkedList;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Queue;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-public class Compilador {
-    public static class simbolo {
-        public String tipo;
-        public String nombre;
-        public String valor;
-
-        public simbolo (String tipo, String nombre, String valor) {
-            this.tipo = tipo;
-            this.nombre = nombre;
-            this.valor = valor;
-        }
-    }
-
-    public static class error {
-        public String codigo;
-        public int linea;
-        public String token;
-
-        public error (String codigo, int linea, String token) {
-            this.codigo = codigo;
-            this.linea = linea;
-            this.token = token;
-        }
-    }
-
-    public static boolean buscarSmb (List<simbolo> tablaSimbolos, String nombre) { // Utilizar los metodos de arraylist en lugar de este metodo
-        for (simbolo smb : tablaSimbolos) { //Comprobar si el símbolo esta guardado
-            if (smb.nombre.equals(nombre)) return true;
-        }
-        return false;
-    }
-    
-    public static void AbrirArchivo (String ruta) {
-        List<String> palReserv = Arrays.asList("ent", "dec", "cad","inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "contando", "finpara;", "mientras", "hacer:", "finmientras;", "mod", "div");
-        List<error> tabErr = new ArrayList<>();
-        String miAlf = "$[*]|[/]|[+]|[-]|[=]|[<>]|[==]|[<=]|]>=]|[<|>]|[(]|[)]|[;]|[:]|(^[&][&]|[\\|][\\|]$)|(^[\\d]+$|^[\\d]+\\.[\\d]+)|(.*\\\".*)^";
-        List<Integer> indices = new ArrayList<>(); //Para guardar las lineas que si contienen información
-        int contLin = 0;
-        String linea;
-        boolean declaracion = false, bloque = false, haycomillas = false;
-        List<simbolo> tabSim = new ArrayList<>();
-        Queue<String> cola = new LinkedList<>();
-
-        try { // Abre el archivo para lectura
-            BufferedReader lector = new BufferedReader(new FileReader(ruta)); // Crea un BufferedReader para leer líneas
-            // Para generar el archivo de salida
-            File salida = new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
-            BufferedWriter escritor = new BufferedWriter(new FileWriter(salida));
-
-            while ((linea = lector.readLine()) != null) {
-                contLin++; // Cuenta cada línea
-                // Si la linea esta vacia, el string palabras es un array de cero posiciones (vacio), sino, es un array de palabras separadas por uno o más espacios en blanco
-                String[] tokens = linea.trim().isEmpty() ? new String[0] : linea.trim().split("\\s+");
-
-                for (String token : tokens) { //System.out.println(palabra);
-                    if (token.equals("\"")) haycomillas = !haycomillas;
-                    
-                    else if (!haycomillas) { // Evitar que considere lo que está entre comillas
-                        if (!Pattern.matches("^[a-z]{0,12}$|^[a-z]{1}[a-z0-9\\_]{0,10}[a-z0-9]$|^[a-z][a-z0-9]{11}$", token))  //Es un id?
-                        if (!palReserv.contains(token)) // Es una palabra reservada? 
-                        if (!Pattern.matches(miAlf, token))  // No coincidió con ningún patron?
-                            tabErr.add(new error("lex01", contLin, token));
-                    } 
-                
-                }
-                if (!linea.trim().isEmpty()) { // Si la linea no esta vacia
-                    indices.add(contLin); // Guarda los indices de las lineas que sí tienen info
-                    escritor.write(linea.trim().replaceAll("\\s+", " ") + "\n"); // Elimina todos los espacios en blanco y escribe la linea
-                }
-                haycomillas = false; // Este podría ser un detalle...
-            }
-            
-            escritor.close();
-
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-
-        //Analisis sintáctico
-        palReserv = Arrays.asList("ent", "dec", "cad", "inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "contando", "finpara;", "mientras", "hacer:", "finmientras;", "mod", "div");
-        String digito = "0|1|2|3|4|5|6|7|8|9";
-        String letra = "a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z";
-        String tipo = "ent|dec|cad";
-        String op_arit = "\\*|/|\\+|-|mod|div";
-        String op_rel = ">=|<=|==|<>|<|>";
-        String op_log = "(&&)|(\\|\\|)";
-        String cte_ent = "(" + digito + ")+";
-        String cte_dec = cte_ent + "\\." + cte_ent;
-        String cte_cad = "\"(.*?)\"";
-        String cte = "(" + cte_ent + ")" + "|" + "(" + cte_dec + ")" + "|" + "(" + cte_cad + ")";
-        String id = "(?!" + String.join("|", palReserv) + ")(" + letra + ")(_*(" + letra + "|" + digito + ")+)*"; 
-        String num = cte_ent + "|" + id;
-        String operando = id + "|" + cte;
-        String condicional = "((" + operando + ") (" + op_rel + ") (" + operando + "))( (" + op_log + ") (" + operando + ") (" + op_rel + ") (" + operando + "))*" ;
-        String operacion = "((" + operando + ") (" + op_arit + ") (" + operando + "))( (" + op_arit + ") (" + operando + "))*";
-        String expresion = "(" + operando + ")( \\+ (" + operando + "))*";
-        String asign = "(" + id + ") = (" + operando + ") ;|(" + id + ") = (" + operacion + ") ;";
-        String imp = "imp \\( (" + expresion + ") \\) ;";
-        String esc = id + " = " + "esc \\( (" + cte_cad + ") \\) ;";
-        String si = "si \\( (" + condicional + ") \\) :";
-        String para = "para (" + id + ") = (" + num + ") hasta (" + num + ")( contando (" + num + "))? :";
-        String mientras = "mientras \\( (" + condicional + ") \\) hacer:";
-        String declara = "((" + tipo + ") ((" + id + ") ;|(" + asign +")))?";
-        String sentencias = "((" + asign + ")|(" + imp + ")|(" + esc + ")|(" + si + ")|(sino:)|(" + para + ")|(" + mientras + ")|(finsi;)|(finpara;)|(finmientras;)|(varinicio:)|(varfin;))*";
-      
-        if (tabErr.isEmpty()) {
-            contLin = 0;
-            try {
-                FileReader archivoSalida = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
-                BufferedReader lector2 = new BufferedReader(archivoSalida); // Crea un BufferedReader para leer líneas
-                while ((linea = lector2.readLine()) != null) {
-                    contLin++; // Cuenta cada línea
-                    if (linea.equals("inicio:")) bloque = true;
-                    else if (linea.equals("fin;")) bloque = false;
-                    else if (linea.equals("varinicio:")) declaracion = true;
-                    else if (linea.equals("varfin;")) declaracion = false;
-                    else if (bloque) {
-                        if (declaracion) {
-                            if (Pattern.matches(declara, linea)) {
-                                String[] tokens = linea.split("\\s+");
-                                if (linea.contains("\"")) tabSim.add(new simbolo(tokens[0], tokens[1], linea.substring(10, linea.length()-4)));
-                                else if (tokens.length > 3) tabSim.add(new simbolo(tokens[0], tokens[1], tokens[3]));
-                                else tabSim.add(new simbolo(tokens[0], tokens[1], ""));
-                            }
-                            else {
-                                //System.out.println("Solo declaraciones en el bloque de declaración");
-                            }
-                        }
-                        else if (Pattern.matches(declara, linea)) {
-                            //System.out.println("Declaración fuera del bloque correspondiente"); 
-                        }
-                        else if (!Pattern.matches(sentencias, linea)) {
-                            tabErr.add(new error("syn02", indices.get(contLin - 1), linea));
-                        }
-                        
-                    }
-                    else {
-                        tabErr.add(new error("syn01", contLin, linea));
-                    }
-                }
-                lector.close();
-                lector2.close();
-            } catch (Exception e) {
-                System.out.println(e);
-            }
-        }
-        System.out.println("\n---------Errores---------");
-        for (error e: tabErr) {
-            System.out.println("Error: " + e.codigo + ", linea: " + e.linea + ", linea: " + e.token + "\n");
-        }
-
-        System.out.println("\n---------SIMBOLOS---------");
-        for (simbolo s: tabSim) {
-            System.out.println("Tipo: " + s.tipo + ", Nombre: " + s.nombre + ", valor: " + s.valor);
-        }
-    }
-
-    public static void main(String[] args) {
-        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
-        AbrirArchivo(ruta);
-    }
-} */

@@ -1,7 +1,13 @@
-syn01 Código fuera de bloque
+lex00 Token no valido
+syn00 El bloque debe ser único
+syn01 Código fuera de bloque inicio / fin
 syn02 Error de sintaxis, verificar expresión
 syn03 ID declarado fuera del bloque de declaración
-syn04 ID sin tipo de dato
-syn05 ID repetido
+syn04 
+syn05 El bloque de declaración debe ir justo después del inicnio
 syn06 Comillas faltantes
-lex01 Token no valido
+sem00 Bloque no fue cerrado correctamente
+sem01 Bloque no fue abierto
+sem03 ID repetido
+sem04 Tipos no coinciden
+sem05 Las cadenas solo pueden usar el operador arimético '+'
