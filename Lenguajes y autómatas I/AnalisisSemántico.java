@@ -67,8 +67,7 @@ public class Compilador {
     static String op = "\\*|/|\\+|-|mod|div|(&&)|(\\|\\|)|>=|<=|==|<>|<|>";
     static List<error> tabErr = new ArrayList<>();
     static boolean haycomillas = false;
-    static List<Integer> indices = new ArrayList<>(); //Para guardar las lineas que si contienen información
-    static Stack<etiqueta> pilaSem = new Stack<>();
+    
     public static void comprobarTipos (String operacion, int contLin, String tipo) {
         String regex = "";
         
@@ -116,22 +115,24 @@ public class Compilador {
         }        
     }
 
-    public static String AnalisisLexico (String ruta) {
+    public static void AbrirArchivo (String ruta) {
         List<String> palReserv = Arrays.asList("ent", "dec", "cad", "inicio:", "fin;", "varinicio:", "varfin;", "imp", "esc", "si", "sino:", "finsi;" , "para", "hasta", "contando", "finpara;", "mientras", "hacer:", "finmientras;", "mod", "div");
-        LinkedList<String> constCad = new LinkedList<>();
         
+        LinkedList<String> constCad = new LinkedList<>();
+        List<Integer> indices = new ArrayList<>(); //Para guardar las lineas que si contienen información
+        Stack<etiqueta> pilaSem = new Stack<>();
         simbolo smb = new simbolo();
         String miAlf = "[*]|[/]|[+]|[-]|[=]|(<>)|(==)|(<=)|(>=)|[<|>]|[(]|[)]|[;]|[:]|(^[&][&]|[\\|][\\|]$)|(^[\\d]+$|^[\\d]+\\.[\\d]+$)";
-        boolean declaracion = false;
+        boolean declaracion = false, hayInicio = false, hayVarInicio = false;
         int contLin = 0;
         Pattern patCad = Pattern.compile(cte_cad);
 
         
+
         try { // Abre el archivo para lectura
             BufferedReader lector = new BufferedReader(new FileReader(ruta)); // Crea un BufferedReader para leer líneas
             // Para generar el archivo de salida
-            ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt";
-            File salida = new File (ruta);
+            File salida = new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
             BufferedWriter escritor = new BufferedWriter(new FileWriter(salida));
 
             while ((linea = lector.readLine()) != null) {
@@ -209,17 +210,12 @@ public class Compilador {
         } catch (Exception e) {
             System.out.println(e);
         }
-        return ruta;
-    }
-
-    public static void analisisSintactico (String ruta) {
-        int contLin = 0; 
+        contLin = 0; 
         try { // syn
-            BufferedReader lector = new BufferedReader(new FileReader(ruta));
+            BufferedReader lector = new BufferedReader(new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt"));
             BufferedReader regex = new BufferedReader (new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\regex.txt"));
             String sentencias = regex.readLine(); // Mi gramatica
             regex.close();
-            boolean hayInicio = false, hayVarInicio = false;
             
             while ((linea = lector.readLine()) != null) {
                 contLin++; // Cuenta cada línea
@@ -246,12 +242,10 @@ public class Compilador {
         } catch (Exception e) {
             System.out.println(e);
         }
-    }
-
-    public static void analisisSemantico (String ruta) {
+        contLin = 0;
         try { // Sem
-            int contLin = 0; 
-            BufferedReader lector = new BufferedReader(new FileReader(ruta)); // Crea un BufferedReader para leer líneas
+            FileReader archivoSalida = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt");
+            BufferedReader lector = new BufferedReader(archivoSalida); // Crea un BufferedReader para leer líneas
             etiqueta et = null;
             
             while ((linea = lector.readLine()) != null) {
@@ -386,38 +380,9 @@ public class Compilador {
 
         } catch (Exception e) {
             System.out.println(e);
-        } 
-    }
-
-    public static void main(String[] args) {
-        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
-        ruta = AnalisisLexico(ruta); // La ruta ahora es el archivo de salida
-        analisisSintactico(ruta);
-        analisisSemantico(ruta);
-        try {// Errores
-            FileReader errores = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\errDesc.txt");
-            BufferedReader lector = new BufferedReader(errores); // Crea un BufferedReader para leer líneas
-           
-            List<String> errDesc = new ArrayList<>();
-            String error;
-
-            while ((error = lector.readLine()) != null) errDesc.add(error);
-            lector.close();
-            for (error e: tabErr) {
-                for (String ln : errDesc) {
-                    if (e.codigo.equals(ln.substring(0,5))){
-                        System.out.println("Error " + e.codigo + ", linea: " + e.linea + ": " + e.token + " \n" + ln.substring(6, ln.length()) + "\n");
-                    }
-                }               
-            }
-            
-        } catch (Exception e) {
-            System.out.println(e);
         }
-
-        
-        try { //Generador de código
-            int contLin = 0;
+        contLin = 0;
+        try {
             BufferedReader lector = new BufferedReader(new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt")); // Crea un BufferedReader para leer líneas
             BufferedWriter escritor = new BufferedWriter(new FileWriter(new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Ensamb.txt")));
             LinkedList<String> data = new LinkedList<>();
@@ -436,6 +401,12 @@ public class Compilador {
                         escritor.write("mov Ds, Ax \n");
                         break;
                     case "varinicio:": 
+                        break;
+                    case "ent":
+                        break;
+                    case "dec":
+                        break;
+                    case "cad": 
                         break;
                     case "varfin;" : 
                         break;
@@ -467,26 +438,7 @@ public class Compilador {
 
                     case "fin;":  
                         escritor.write("mov ah, 4Ch\n");
-                        escritor.write("int 21h\n");
-                        escritor.write(".DATA\n");
-                        escritor.write("S db 10,13,24h\n"); // Salto de linea y fin
-                        for (simbolo s: tabSim) {
-                            switch (s.tipo) {
-                                case "ent":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
-                                case "dec":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
-                                case "cad":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
-                            }
-                            
-                        }   
-                        // data.forEach((a) -> escritor.write(a));
-                        escritor.write(".STACK\n");
-                        escritor.write("END Inicio\n");
+                        escritor.write("int 21h\n"); 
                         break;
                 }
 
@@ -503,16 +455,54 @@ public class Compilador {
                 if (linea.equals("fin;")) break;
             }
 
-            
+            escritor.write(".DATA\n");
+            //95escritor.write("S db 10,13,24h");
+           // data.forEach((a) -> escritor.write(a));
+            escritor.write(".STACK\n");
+            escritor.write("END Inicio\n");
 
             //File f = new File ("file.asm");
             lector.close();
             escritor.close();
 
+
         } catch (Exception e) {
             System.out.println(e);
         }
+
+        try {// Errores
+            FileReader errores = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\errDesc.txt");
+            BufferedReader lector = new BufferedReader(errores); // Crea un BufferedReader para leer líneas
+           
+            List<String> errDesc = new ArrayList<>();
+            String error;
+
+            while ((error = lector.readLine()) != null) {
+                errDesc.add(error);
+            }
+            lector.close();
+            for (error e: tabErr) {
+                for (String ln : errDesc) {
+                    if (e.codigo.equals(ln.substring(0,5))){
+                        System.out.println("Error " + e.codigo + ", linea: " + e.linea + ": " + e.token + " \n" + ln.substring(6, ln.length()) + "\n");
+                    }
+                }               
+            }
+            
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+
+        /*
+        for (simbolo s: tabSim) {
+            System.out.println(s.nombre + " de tipo " + s.tipo);
+        }   */
         
-        
+    }
+
+    public static void main(String[] args) {
+        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
+        AbrirArchivo(ruta);
     }
 }

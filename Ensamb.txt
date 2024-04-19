@@ -1,0 +1,15 @@
+.MODEL SMALL
+.CODE
+Inicio:
+mov Ax, @Data
+mov Ds, Ax 
+mov ah, 4Ch
+int 21h
+.DATA
+S db 10,13,24h
+a db ? 
+b db ? 
+x db ? 
+y db ? 
+.STACK
+END Inicio
