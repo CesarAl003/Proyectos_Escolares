@@ -16,10 +16,12 @@ public class Compilador {
     public static class simbolo {
         public String tipo;
         public String nombre;
+        public String valor;
 
         public simbolo () {
             this.tipo = "";
             this.nombre = "";
+            this.valor = "";
         }
 
         public simbolo (String tipo, String nombre) {
@@ -69,11 +71,11 @@ public class Compilador {
     static boolean haycomillas = false;
     static List<Integer> indices = new ArrayList<>(); //Para guardar las lineas que si contienen información
     static Stack<etiqueta> pilaSem = new Stack<>();
+    
     public static void comprobarTipos (String operacion, int contLin, String tipo) {
-        String regex = "";
-        
-        String[] operandos = operacion.split(op);
-        switch (tipo) {
+        String regex = ""; // Revisa declaraciones inicializadas con un valor y asignaciones
+        String[] operandos = operacion.split(op); // Separa cada uno de los operandos
+        switch (tipo) { // Determinamos el tipo para poder hacer la comprobación
             case "ent": regex = cte_ent; break;
             case "dec": regex = cte_dec; break;
             case "cad": regex = cte_cad; break;
@@ -85,20 +87,21 @@ public class Compilador {
                 if (Pattern.matches(id, operando)) {  // Si es un id, lo busca en la tabla de simbolos
                     simbolo simb = buscarSmb(operando);
                     if (simb != null) // si lo encuentra, evalúa que sea del tipo de dato correcto
-                    if (!simb.tipo.equals(tipo))
+                    if (!simb.tipo.equals(tipo)) 
                         tabErr.add(new error("sem04", contLin, operando));
                 }
                 else tabErr.add(new error("sem04", contLin, operando)); // No coincide ni con una cte ni con un id
+
             }
         }
     }
 
-    public static void comprobarTipos (String operacion, int contLin) { 
-        String[] operandos = operacion.split(op);
+    public static void comprobarTipos (String operacion, int contLin) { // Revisa comparaciones condicionales
+        String[] operandos = operacion.split(op); // Se compara cada par de operandos
         String tipo = "";
         for (String operando : operandos) {
             if (tipo.equals("")) { 
-                operando = operando.trim();
+                operando = operando.trim(); // Determinamos el tipo para poder hacer la comprobación
                 if (Pattern.matches(cte_ent, operando)) tipo = "ent";
                 else if (Pattern.matches(cte_dec, operando)) tipo = "dec";
                 else if (Pattern.matches(cte_cad, operando)) tipo = "cad";
@@ -113,7 +116,7 @@ public class Compilador {
                comprobarTipos(operacion, contLin, tipo);
                tipo = "";
             }
-        }        
+        }
     }
 
     public static String AnalisisLexico (String ruta) {
@@ -194,8 +197,7 @@ public class Compilador {
                             nuevaLinea += parte.replaceAll("\\s+", " ");
                             if (!constCad.isEmpty()) nuevaLinea += constCad.poll();
                         }
-                        nuevaLinea = nuevaLinea.trim();
-                        
+                        nuevaLinea = nuevaLinea.trim();                        
                     }
                     else nuevaLinea = linea.trim().replaceAll("\\s+", " ");
                     escritor.write(nuevaLinea + "\n"); // Elimina todos los espacios en blanco y escribe la linea
@@ -253,10 +255,9 @@ public class Compilador {
             int contLin = 0; 
             BufferedReader lector = new BufferedReader(new FileReader(ruta)); // Crea un BufferedReader para leer líneas
             etiqueta et = null;
-            
             while ((linea = lector.readLine()) != null) {
                 contLin++;
-                String operacion;
+                String operacion = "";
                 String[] palabras = linea.split("\\s");
                 
                 switch (palabras[0]) {
@@ -267,28 +268,42 @@ public class Compilador {
                         pilaSem.push(new etiqueta("varinicio:", indices.get(contLin - 1)));
                         break;
                     case "ent":
-                        if (palabras.length > 3 && palabras[2].equals("=")) {
-                            operacion = linea.substring(8,linea.length() - 2);
+                        
+                        if (palabras[2].equals("=")) {
+                            // Obtiene la operación compuesta por operadores y operandos (a + b - c)
+                            for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i];
                             comprobarTipos(operacion, indices.get(contLin - 1), "ent");
+                            //smb.valor = operacion; // Completar la tabla de simbolos
+                        }
+                        else {
+                            simbolo smb = buscarSmb(palabras[1]);
+                            if ( smb != null ) smb.valor = "0";
                         }
                         break;
                     case "dec":
+                        //smb = buscarSmb(palabras[1]);
                         if (palabras.length > 3 && palabras[2].equals("=")) {
-                            operacion = linea.substring(8,linea.length() - 2);
+                            // Obtiene la operación compuesta por operadores y operandos (a + b - c)
+                            for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i];
                             comprobarTipos(operacion, indices.get(contLin - 1), "dec");
+                            //smb.valor = operacion; // Completar la tabla de simbolos
                         }
+                        //else smb.valor = "0.0";
                         break;
-                    case "cad": //
+                    case "cad": 
+                        //smb = buscarSmb(palabras[1]);
                         if (palabras.length > 3 && palabras[2].equals("=")) {
                             Matcher matOp_arit = Pattern.compile(op).matcher(linea);
                             while (matOp_arit.find()) { // Revisa todos los operadores aritmeticos de la linea
                                 if (!matOp_arit.group(0).equals("+"))  // si no es un +, marca error
                                     tabErr.add(new error("sem05", indices.get(contLin - 1), ""));
                             }
-
-                            operacion = linea.substring(8,linea.length() - 2);
-                            comprobarTipos(operacion, indices.get(contLin - 1), "cad");
+                            // Obtiene la operación compuesta por operadores y operandos (a + b - c)
+                            for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i] + " ";
+                            comprobarTipos(operacion, indices.get(contLin - 1), "cad");  
+                            //smb.valor = operacion.trim(); // Completar la tabla de simbolos
                         }
+                        //else smb.valor = "\"\"";
                         break;
                     case "varfin;" : 
                         if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "varfin;"));
@@ -302,7 +317,7 @@ public class Compilador {
                     case "si": 
                         pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
                         String[] comparaciones = linea.substring(5, linea.length() - 4 ).split("(&&)|(\\|\\|)");
-                        for (String comparacion : comparaciones) {
+                        for (String comparacion : comparaciones) { //Enviamos cada comparación individual
                             comprobarTipos(comparacion.trim(), indices.get(contLin - 1));
                         }
                         break;
@@ -342,6 +357,10 @@ public class Compilador {
 
                     case "mientras": 
                         pilaSem.push(new etiqueta(palabras[0], indices.get(contLin - 1)));
+                        String[] comparacion = linea.substring(5, linea.length() - 4 ).split("(&&)|(\\|\\|)");
+                        for (String compara : comparacion) { //Enviamos cada comparación individual
+                            comprobarTipos(compara.trim(), indices.get(contLin - 1));
+                        }
                         break;
                     case "finmientras;":
                         if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "finmientras;"));
@@ -367,10 +386,19 @@ public class Compilador {
                         if (palabras[2].equals("esc")) {}//System.out.print("esc");
                         else { // Asign
                             String tipo = "";
-                            operacion = linea.substring(4, linea.length() - 2);
+                            for (int i = 2; i < palabras.length-1; i++) operacion += palabras[i] + " ";
+
                             simbolo simb = buscarSmb(palabras[0]);
                             if (simb != null) tipo = simb.tipo; // Si no es nulo, guarda el tipo
-                            comprobarTipos(operacion, indices.get(contLin - 1), tipo);
+                                comprobarTipos(operacion, indices.get(contLin - 1), tipo);
+
+                            if (tipo.equals("cad")) {
+                                Matcher matOp_arit = Pattern.compile(op).matcher(linea);
+                                while (matOp_arit.find()) { // Revisa todos los operadores aritmeticos de la linea
+                                    if (!matOp_arit.group(0).equals("+"))  // si no es un +, marca error
+                                        tabErr.add(new error("sem05", indices.get(contLin - 1), ""));
+                                }
+                            }
                         }
                     }
                 }
@@ -389,130 +417,199 @@ public class Compilador {
         } 
     }
 
+    // Concatenar se requiere en dos casos, imp y esc
+    public static String concatena (String[] palabras, int inicio) {
+        // Primero, extraer y concatenar constantes
+        String constante = "";
+        for (int i = inicio; i < palabras.length-2; i++) {
+            if (palabras[i].equals("\"")) haycomillas = !haycomillas;
+            if (Pattern.matches(id, palabras[i]) && !haycomillas) {
+                simbolo smb = buscarSmb(palabras[i]);
+                constante += smb.valor + " "; // Extraer valor de variables
+            }
+            else constante += palabras[i] + " ";
+        }
+        constante = constante.replaceAll("\"", "").replaceAll(" \\+ ","").trim(); //System.out.println("."+constante+".");
+        return constante;
+    }
+
     public static void main(String[] args) {
         String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
+        int cont = 0;
         ruta = AnalisisLexico(ruta); // La ruta ahora es el archivo de salida
         analisisSintactico(ruta);
         analisisSemantico(ruta);
-        try {// Errores
-            FileReader errores = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\errDesc.txt");
-            BufferedReader lector = new BufferedReader(errores); // Crea un BufferedReader para leer líneas
-           
-            List<String> errDesc = new ArrayList<>();
-            String error;
-
-            while ((error = lector.readLine()) != null) errDesc.add(error);
-            lector.close();
-            for (error e: tabErr) {
-                for (String ln : errDesc) {
-                    if (e.codigo.equals(ln.substring(0,5))){
-                        System.out.println("Error " + e.codigo + ", linea: " + e.linea + ": " + e.token + " \n" + ln.substring(6, ln.length()) + "\n");
-                    }
-                }               
-            }
-            
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-
         
-        try { //Generador de código
-            int contLin = 0;
-            BufferedReader lector = new BufferedReader(new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt")); // Crea un BufferedReader para leer líneas
-            BufferedWriter escritor = new BufferedWriter(new FileWriter(new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Ensamb.txt")));
-            LinkedList<String> data = new LinkedList<>();
-
-            while ((linea = lector.readLine()) != null) {
-                contLin++;
-                String[] palabras = linea.split("\\s");
-
+        if (tabErr.isEmpty()) {
+            try { //Generador de código
+                BufferedReader lector = new BufferedReader(new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Salida.txt")); // Crea un BufferedReader para leer líneas
+                BufferedWriter escritor = new BufferedWriter(new FileWriter(new File ("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Ensamb.txt")));
+                LinkedList<String> data = new LinkedList<>();
                 
-                switch (palabras[0]) {
-                    case "inicio:":
-                        escritor.write(".MODEL SMALL\n");
-                        escritor.write(".CODE\n");
-                        escritor.write("Inicio:\n");
-                        escritor.write("mov Ax, @Data\n");
-                        escritor.write("mov Ds, Ax \n");
-                        break;
-                    case "varinicio:": 
-                        break;
-                    case "varfin;" : 
-                        break;
-
-                    case "imp":  break;
-                    case "si": 
-                        break;
+                while ((linea = lector.readLine()) != null) {
+                    String[] palabras = linea.split("\\s");
                     
-                    case "sino:": 
-                        break;
-
-                    case "finsi;": 
-                        break;
+                    switch (palabras[0]) {
+                        case "inicio:":
+                            escritor.write(".MODEL SMALL\n");
+                            escritor.write(".CODE\n");
+                            escritor.write("Inicio:\n");
+                            escritor.write("mov Ax, @Data\n");
+                            escritor.write("mov Ds, Ax \n");
+                            break;
+                        case "varinicio:": 
+                            break;
+    
+                            case "ent":
+                            if (palabras.length > 3 && palabras[2].equals("=")) {
                     
-                    case "para": 
-                        break;
-
-                    case "finpara;": 
-
-                        
-                        break;
-
-                    case "mientras": 
-
-                        break;
-                    case "finmientras;":
-
-                        break;
-
-                    case "fin;":  
-                        escritor.write("mov ah, 4Ch\n");
-                        escritor.write("int 21h\n");
-                        escritor.write(".DATA\n");
-                        escritor.write("S db 10,13,24h\n"); // Salto de linea y fin
-                        for (simbolo s: tabSim) {
-                            switch (s.tipo) {
-                                case "ent":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
-                                case "dec":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
-                                case "cad":
-                                    escritor.write(s.nombre + " db ? \n");
-                                    break;
                             }
-                            
-                        }   
-                        // data.forEach((a) -> escritor.write(a));
-                        escritor.write(".STACK\n");
-                        escritor.write("END Inicio\n");
-                        break;
-                }
-
-                if (palabras.length > 1) 
-                switch (palabras[1]) {
-                    case "=": {
-                        if (palabras.length > 2) 
-                        if (palabras[2].equals("esc")) {}//System.out.print("esc");
-                        else { // Asign
-                            
+                            break;
+                        case "dec":
+                            if (palabras.length > 3 && palabras[2].equals("=")) {
+                               
+                            }
+                            break;
+                        case "cad": //
+                            if (palabras.length > 3 && palabras[2].equals("=")) {
+                                
+                            }
+                            break;
+                        case "varfin;" : 
+                            break;
+    
+                        case "imp": // Determinar si ser requiere imprimir una variable que se leyó por teclado
+                            // Primero, concatenar variables y constantes
+                            String constante = concatena(palabras,2);
+                            // Salta
+                            escritor.write("mov Ah, 9h\n");
+                            escritor.write("mov Dx, Offset S\n");
+                            escritor.write("int 21h\n");
+                            // Imprime la constante
+                            escritor.write("mov Dx, Offset dato"+ cont + "\n");
+                            escritor.write("int 21h\n");
+    
+                            data.add("dato" + cont + " db \"" + constante.replace("\"", "") + "\", 10,13,36\n");
+                            cont++;
+                            break;
+                        case "si": 
+                            break;
+                        
+                        case "sino:": 
+                            break;
+    
+                        case "finsi;": 
+                            break;
+                        
+                        case "para": 
+                            break;
+    
+                        case "finpara;": 
+    
+                            break;
+    
+                        case "mientras": 
+    
+                            break;
+                        case "finmientras;":
+    
+                            break;
+    
+                        case "fin;":  
+                            escritor.write("mov Ah, 4Ch\n");
+                            escritor.write("int 21h\n");
+    /*------------------------------------------VARIABLES------------------------------------------*/
+                            escritor.write(".DATA\n");
+                            escritor.write("S db 10,13,24h\n"); // Salto de linea y fin
+                            for (String dato : data) {
+                                escritor.write(dato);
+                            }
+                            /*
+                            for (simbolo s: tabSim) {
+                                switch (s.tipo) {
+                                    case "ent":
+                                        escritor.write(s.nombre + " db ? \n");
+                                        break;
+                                    case "dec":
+                                        escritor.write(s.nombre + " db ? \n");
+                                        break;
+                                    case "cad":
+                                        escritor.write(s.nombre + " db 255,?,20 dup ('$') \n"); // Para leer
+                                        escritor.write(s.nombre + " db ? \n"); // DEclara inicializa null5
+                                        break;
+                                }
+                                
+                            } */
+                            escritor.write(".STACK\n");
+                            escritor.write("END Inicio\n");
+                            break;
+                    }
+    
+                    if (palabras.length > 1) 
+                    switch (palabras[1]) {
+                        case "=": {//esc
+                            if (palabras.length > 2) 
+                            if (palabras[2].equals("esc")) {
+                                // Imprimir mensaje
+                                if (palabras[4].equals("\"")) {
+                                    String constante = concatena(palabras, 4);
+                                    // Salta
+                                    escritor.write("mov Ah, 9h\n");
+                                    escritor.write("mov Dx, Offset S\n");
+                                    escritor.write("int 21h\n");
+                                    // Imprime la constante
+                                    escritor.write("mov Dx, Offset dato"+ cont + "\n");
+                                    escritor.write("int 21h\n");
+                                    // Crear variable
+                                    data.add("dato" + cont + " db \"" + constante.replace("\"", "") + "\", 10,13,36\n");
+                                    cont++;
+                                }
+                                // Leer por teclado
+                                escritor.write("mov Ah, 0Ah \n");
+                                escritor.write("mov Dx, Offset "+ palabras[0] + "\n");
+                                escritor.write("int 21h\n");
+                                // Guardar la variable
+                                data.add(palabras[0] + " db 255,?,255\n");
+                                //simbolo smb = buscarSmb(palabras[0]);
+                                //if (smb != null ) smb.valor = "?";
+                            }
+                            else { // Asign
+                                
+                            }
                         }
                     }
                 }
-                if (linea.equals("fin;")) break;
+    
+                //File f = new File ("file.asm");
+                lector.close();
+                escritor.close();
+            } catch (Exception e) {
+                System.out.println(e);
             }
-
-            
-
-            //File f = new File ("file.asm");
-            lector.close();
-            escritor.close();
-
-        } catch (Exception e) {
-            System.out.println(e);
         }
-        
-        
+        else {
+            try {// Errores
+                FileReader errores = new FileReader("C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\errDesc.txt");
+                BufferedReader lector = new BufferedReader(errores); // Crea un BufferedReader para leer líneas
+            
+                List<String> errDesc = new ArrayList<>();
+                String error;
+
+                while ((error = lector.readLine()) != null) errDesc.add(error);
+                lector.close();
+                for (error e: tabErr) {
+                    for (String ln : errDesc) {
+                        if (e.codigo.equals(ln.substring(0,5))){
+                            System.out.println("Error " + e.codigo + ", linea: " + e.linea + ": " + e.token + " \n" + ln.substring(6, ln.length()) + "\n");
+                        }
+                    }               
+                }
+                
+            } catch (Exception e) {
+                System.out.println(e);
+            }
+        }
+
+        for (simbolo smb: tabSim) System.out.printf("tipo: %s, nombre: %s, valor: %s \n", smb.tipo, smb.nombre, smb.valor);
     }
 }
