@@ -7,12 +7,11 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Queue;
 import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class Compilador {
+public class AnalisisSemántico {
     public static class simbolo {
         public String tipo;
         public String nombre;
@@ -502,7 +501,7 @@ public class Compilador {
     }
 
     public static void main(String[] args) {
-        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
-        AbrirArchivo(ruta);
+//        String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
+  //      AbrirArchivo(ruta);
     }
 }

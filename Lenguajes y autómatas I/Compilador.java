@@ -7,12 +7,9 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Queue;
 import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.print.DocFlavor.STRING;
 
 public class Compilador {
     public static class simbolo {
@@ -67,6 +64,7 @@ public class Compilador {
     static String linea, nuevaLinea = "", cte_ent = "(\\d)+";
     static String cte_dec = cte_ent + "\\." + cte_ent;
     static String cte_cad = "(\" [^\\\"]* \")|(\" \")";
+    static String cte = "(" + cte_ent + ")" + "|" + "(" + cte_dec + ")" + "|" + "(" + cte_cad + ")";
     static String id = "^[a-z]{0,12}$|^[a-z]{1}[a-z0-9\\_]{0,10}[a-z0-9]$|^[a-z][a-z0-9]{11}$";
     static String op = "\\*|/|\\+|-|mod|div|(&&)|(\\|\\|)|>=|<=|==|<>|<|>";
     static List<error> tabErr = new ArrayList<>();
@@ -75,34 +73,26 @@ public class Compilador {
     static Stack<etiqueta> pilaSem = new Stack<>();
     
     public static void comprobarTipos (String operacion, int contLin, String tipo) {
-        String regex = "", concatenado = ""; // Revisa declaraciones inicializadas con un valor y asignaciones
-        String[] palabras = operacion.split(" ");
-        int cont = 1 ;
-        String[] operandos = operacion.split("op"); // Separa cada uno de los operandos
+        String regex = ""; // Revisa declaraciones inicializadas con un valor y asignaciones
+        String[] operandos = operacion.split(op); // Separa cada uno de los operandos
         switch (tipo) { // Determinamos el tipo para poder hacer la comprobación
             case "ent": regex = cte_ent; break;
             case "dec": regex = cte_dec; break;
             case "cad": regex = cte_cad; break;
         }
 
-        for (String operando : operandos) { System.out.println(operando);// Verificar cada operando
+        for (String operando : operandos) { // Verificar cada operando
             operando = operando.trim();
-            if (Pattern.matches(regex, operando)) {// Evalua que las constantes sean del mismo tipo
-                concatenado += operando + palabras[cont];
-                cont+=2;
+            if (!Pattern.matches(regex, operando)) { // Evalua que las constantes sean del mismo tipo
+                if (Pattern.matches(id, operando)) {  // Si es un id, lo busca en la tabla de simbolos
+                    simbolo simb = buscarSmb(operando);
+                    if (simb != null) // si lo encuentra, evalúa que sea del tipo de dato correcto
+                    if (!simb.tipo.equals(tipo)) 
+                        tabErr.add(new error("sem04", contLin, operando));
+                }
+                else tabErr.add(new error("sem04", contLin, operando)); // No coincide ni con una cte ni con un id
             }
-            else if (Pattern.matches(id, operando)) {  // Si es un id, lo busca en la tabla de simbolos
-                simbolo simb = buscarSmb(operando);
-                if (simb != null) // si lo encuentra, evalúa que sea del tipo de dato correcto
-                if (simb.tipo.equals(tipo)) {// Y concatena su valor para tenerlo todo en constantes
-                    concatenado += simb.valor + palabras[cont];
-                    cont+=2;
-                } 
-                else tabErr.add(new error("sem04", contLin, operando));
-            }
-            else tabErr.add(new error("sem04", contLin, operando)); // No coincide ni con una cte ni con un id
-            
-        } System.out.println(concatenado);
+        }
     }
 
     public static void comprobarTipos (String operacion, int contLin) { // Revisa comparaciones condicionales
@@ -126,6 +116,47 @@ public class Compilador {
                tipo = "";
             }
         }
+    }
+
+    // Concatenar se requiere en imp y esc
+    public static List<String> concatena (String[] palabras, int inicio, int fin) {
+        List<String> ctes = new ArrayList<>();
+        // Primero, extraer y concatenar constantes
+        String constante = "";
+        for (int i = inicio; i < palabras.length-fin; i++) {
+            if (palabras[i].equals("\"")) haycomillas = !haycomillas; // Para evitar confusiones con los id's
+            else if (Pattern.matches(id, palabras[i]) && !haycomillas) {
+                simbolo smb = buscarSmb(palabras[i]);
+                if (smb != null) { // Si el valor es ?, es un id que se leyó por teclado
+                    if (smb.valor == "?" || smb.valor.equals("!")) {
+                        constante = constante.replaceAll("\"", "").replaceAll(" \\+ ","").replaceAll("\\+ ","");
+                        ctes.add(constante); // constante + id + constante + ...
+                        ctes.add(smb.nombre); 
+                        constante = "";
+                    }
+                    else constante += smb.valor; // Extraer valor de variable no leida
+                }
+            }
+            else constante += palabras[i] + " "; // Concatenar la constante
+        }
+        
+        if (!constante.equals("")) { // Guardar la última constante
+            constante = constante.replaceAll("\"", "").replaceAll(" \\+ ","").replaceAll("\\+ ","");
+            ctes.add(constante);
+        }
+        return ctes;
+    }
+    //asigna se utiliza en asign y en declara
+    public static String asigna (String[] palabras, int inicio) {
+        String constante = "";
+        for (int i = inicio; i < palabras.length; i+=2) { // i-1 operador, i operando
+            if (Pattern.matches(id, palabras[i])) {
+                simbolo smb = buscarSmb(palabras[i]);
+                if (smb != null) constante += palabras[i-1] + " " + smb.valor + " ";
+            }
+            else constante += palabras[i-1] + " " + palabras[i] + " ";
+        }
+        return constante.substring(2);
     }
 
     public static String AnalisisLexico (String ruta) {
@@ -268,8 +299,9 @@ public class Compilador {
 
             while ((linea = lector.readLine()) != null) {
                 contLin++;
-                String operacion = "";
+                String operacion = "", constante = "";;
                 String[] palabras = linea.split("\\s");
+                
                 
                 switch (palabras[0]) {
                     case "inicio:": 
@@ -280,16 +312,13 @@ public class Compilador {
                         break;
                     case "ent":
                         smb = buscarSmb(palabras[1]);
-                        if (palabras[2].equals("=")) { 
+                        if (palabras[2].equals("=")) {
                             // Obtiene la operación compuesta por operadores y operandos (a + b - c)
                             for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i] + " ";
                             comprobarTipos(operacion, indices.get(contLin - 1), "ent");
-                            if (smb != null) { // Completar la tabla de simbolos
-                                
-                            //System.out.println(operacion);
-                                
-                                smb.valor = operacion;
-                            } 
+                            // Completar la tabla de simbolos con los valores de cada variable
+                            //smb.valor = asigna(palabras,3);
+                            
                         }
                         else if ( smb != null ) smb.valor = "0";
                          
@@ -298,13 +327,14 @@ public class Compilador {
                         smb = buscarSmb(palabras[1]);
                         if (palabras.length > 3 && palabras[2].equals("=")) {
                             // Obtiene la operación compuesta por operadores y operandos (a + b - c)
-                            for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i];
+                            for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i] + " ";
                             comprobarTipos(operacion, indices.get(contLin - 1), "dec");
-                            smb.valor = operacion; // Completar la tabla de simbolos
+                            // Completar la tabla de simbolos con los valores de cada variable
+                            //smb.valor = asigna(palabras,3);
                         }
                         else smb.valor = "0.0";
                         break;
-                    case "cad": 
+                    case "cad":
                         smb = buscarSmb(palabras[1]);
                         if (palabras.length > 3 && palabras[2].equals("=")) {
                             Matcher matOp_arit = Pattern.compile(op).matcher(linea);
@@ -316,10 +346,15 @@ public class Compilador {
                             for (int i = 3; i < palabras.length-1; i++) operacion += palabras[i] + " ";
                             comprobarTipos(operacion, indices.get(contLin - 1), "cad");
                             operacion = operacion.replace(" \"", "").replace("\" ", "").replace(" + ","");  
-                            smb.valor = operacion; // Completar la tabla de simbolos
+                            
+                            List<String> constantes = concatena(palabras, 3, 1);
+                            for (String c : constantes) constante += c;
+                            
+                            smb.valor = constante; // Completar la tabla de simbolos
                         }
-                        else smb.valor = "\"\"";
+                        else smb.valor = "";
                         break;
+
                     case "varfin;" : 
                         if (pilaSem.isEmpty()) tabErr.add(new error("sem01", indices.get(contLin - 1), "varfin;"));
                         else {
@@ -401,25 +436,35 @@ public class Compilador {
                         if (palabras[2].equals("esc")) {}
                         else { // Asign
                             String tipo = "";
-                            for (int i = 2; i < palabras.length-1; i++) operacion += palabras[i];
-
-                            simbolo simb = buscarSmb(palabras[0]);
-                            if (simb != null) tipo = simb.tipo; // Si no es nulo, guarda el tipo
-                                comprobarTipos(operacion, indices.get(contLin - 1), tipo);
-                                List<String> opr = concatena(palabras, 2,1);
+                            for (int i = 2; i < palabras.length-1; i++) operacion += palabras[i] + " ";
                             
-                            if (tipo.equals("cad")) {
-                                Matcher matOp_arit = Pattern.compile(op).matcher(linea);
-                                while (matOp_arit.find()) { // Revisa todos los operadores aritmeticos de la linea
-                                    if (!matOp_arit.group(0).equals("+"))  // si no es un +, marca error
-                                        tabErr.add(new error("sem05", indices.get(contLin - 1), ""));
+                            simbolo simb = buscarSmb(palabras[0]);
+                            if (simb != null) {
+                                tipo = simb.tipo; // Si no es nulo, guarda el tipo
+                                comprobarTipos (operacion, indices.get(contLin - 1), tipo);
+                            
+                                if (tipo.equals("cad")) {
+                                    Matcher matOp_arit = Pattern.compile(op).matcher(linea);
+                                    while (matOp_arit.find()) { // Revisa todos los operadores aritmeticos de la linea
+                                        if (!matOp_arit.group(0).equals("+"))  // si no es un +, marca error
+                                            tabErr.add(new error("sem05", indices.get(contLin - 1), ""));
+                                    }
+                                    List<String> ctes = concatena(palabras, 2, 1);
+                                    // Asignar el valor para completar la tabla de simbolos
+                                    for (String c : ctes) constante += c;
+                                    simb.valor = constante;
+                                }
+                                else { // ent y dec
+                                    constante = asigna(palabras, 2);
+                                    //simb.valor = constante;
                                 }
                             }
+
+                        
                         }
                     }
                 }
                 if (linea.equals("fin;")) break;
-                
             }
             // Las etiquetas restantes en la pila son errores
             for (etiqueta e: pilaSem) {
@@ -433,37 +478,9 @@ public class Compilador {
         } 
     }
 
-    // Concatenar se requiere en imp y esc
-    public static List<String> concatena (String[] palabras, int inicio, int fin) {
-        List<String> ctes = new ArrayList<>();
-        // Primero, extraer y concatenar constantes
-        String constante = "";
-        for (int i = inicio; i < palabras.length-fin; i++) {
-            if (palabras[i].equals("\"")) haycomillas = !haycomillas; // Para evitar confusiones con los id's
-            else if (Pattern.matches(id, palabras[i]) && !haycomillas) {
-                simbolo smb = buscarSmb(palabras[i]);
-                if (smb != null) { // Si el valor es ?, es un id que se leyó por teclado
-                    if (smb.valor == "?") {
-                        constante = constante.replaceAll("\"", "").replaceAll(" \\+ ","").replaceAll("\\+ ","");
-                        ctes.add(constante); // constante + id + constante + ...
-                        ctes.add(smb.nombre); 
-                        constante = "";
-                    }
-                    else constante += smb.valor; // Extraer valor de variable no leida
-                }
-            }
-            else constante += palabras[i] + " "; // Concatenar la constante
-        }
-        if (!constante.equals("")) { // Guardar la última constante
-            constante = constante.replaceAll("\"", "").replaceAll(" \\+ ","").replaceAll("\\+ ","");
-            ctes.add(constante.substring(0, constante.length()-1));
-        }
-        return ctes;
-    }
-
     public static void main(String[] args) {
         String ruta = "C:\\Users\\Ayums\\WorkSpace\\Proyectos_Escolares\\Fuente.txt";
-        int cont = 0;
+        int cont = 0, salto = 0;
         ruta = AnalisisLexico(ruta); // La ruta ahora es el archivo de salida
         analisisSintactico(ruta);
         analisisSemantico(ruta);
@@ -485,31 +502,34 @@ public class Compilador {
                             escritor.write("mov Ax, @Data\n");
                             escritor.write("mov Ds, Ax \n");
                             break;
-                        case "varinicio:": 
-                            break;
-    
+                        case "varinicio:": break;
                         case "ent": break;
                         case "dec": break;
                         case "cad": break;
                         case "varfin;": break;
-    
+
                         case "imp":
                             // Primero, concatenar variables y constantes
                             List<String> ctes = concatena (palabras,2,2);
+
                             // Salta
                             escritor.write("mov Ah, 9h\n");
                             escritor.write("mov Dx, Offset S\n");
                             escritor.write("int 21h\n");
-
-                            for (String cte: ctes) {
+                            
+                            for (String cte: ctes) { System.out.println(cte);
                                 // Imprime la constante o variable
                                 simbolo smb = buscarSmb(cte);
                                 if (smb != null) {
                                     if (smb.valor.equals("?")) { // Variable leida por teclado
                                         escritor.write("xor Bx, Bx\n");
                                         escritor.write("mov Bl, " + cte + "[1]\n");
-                                        escritor.write("mov " + cte + "[bx+2], '$'\n");
+                                        escritor.write("mov " + cte + "[Bx+2], '$'\n"); // Para que se borre el caracter 0dh, que regresa el cursor al inicio de la linea
                                         escritor.write("mov Dx, Offset " + cte + " + 2\n");
+                                        escritor.write("int 21h\n");
+                                    }
+                                    else if (smb.valor.equals("!")) { // Variable asignada
+                                        escritor.write("mov Dx, Offset " + cte + "\n");
                                         escritor.write("int 21h\n");
                                     }
                                 }    
@@ -517,20 +537,36 @@ public class Compilador {
                                     escritor.write("mov Dx, Offset dato" + cont + "\n");
                                     escritor.write("int 21h\n");
                                     // Crear variable
-                                    data.add("dato" + cont + " db \"" + cte + "\",36\n");
+                                    data.add("dato" + cont + " db \"" + cte + "\", 36\n");
                                     cont++;
                                 }
                             }
-                            
-                            
                             break;
-                        case "si": 
+                        case "si": // si ( a < b ) :
+                            escritor.write("xor Cx, Cx\n");
+                            escritor.write("mov Si, offset " + palabras[2] + " + 2\n");
+                            escritor.write("mov Cl, byte ptr [si]\n");
+                            escritor.write("mov Si, offset " + palabras[4] + " + 2\n");
+                            escritor.write("mov Ch, byte ptr [Si]\n");
+                            escritor.write("cmp Cl, Ch\n");
+                            switch (palabras[3]) {
+                                case ">":
+                                    escritor.write("jna salto" + salto + "\n"); // Se salta cuando no es al revez
+                                    break;
+                                case "<": escritor.write("jnb salto" + salto + "\n"); break;
+                                case ">=": escritor.write("jnae salto" + salto + "\n"); break;
+                                case "<=": escritor.write("jnbe salto" + salto + "\n"); break;
+                                case "==": escritor.write("je salto" + salto + "\n"); break; // Ajustar el valor/
+                                case "<>": escritor.write("je salto" + salto+"\n"); break;
+                            }
                             break;
                         
                         case "sino:": 
                             break;
     
-                        case "finsi;": 
+                        case "finsi;":
+                            escritor.write("salto"+salto+":\n");
+                            salto++;
                             break;
                         
                         case "para": 
@@ -550,15 +586,14 @@ public class Compilador {
                         case "fin;":  
                             escritor.write("mov Ah, 4Ch\n");
                             escritor.write("int 21h\n");
-                            //VARIABLES
-                            escritor.write(".DATA\n");
+                            escritor.write(".DATA\n"); // VARIABLES
                             escritor.write("S db 10,13,24h\n"); // Salto de linea y fin
                             for (String dato : data) escritor.write(dato);
                             
                             //Vaciar tabla de simbolos
                             for (simbolo s: tabSim) { // Las variables leidas se declaran diferente al leer
                                 if (!s.valor.equals("?")) escritor.write(s.nombre + " db \"" + s.valor + "\", '$'\n"); 
-                           }
+                            }
                             escritor.write(".STACK\n");
                             escritor.write("END Inicio\n");
                             break;
@@ -610,15 +645,147 @@ public class Compilador {
                                 simbolo smb = buscarSmb(palabras[0]);
                                 if (smb != null ) smb.valor = "?";
                             }
-                            else { // Asignacion x = <operación>
-                               /* List<String> ctes = concatena (palabras, 4);
-                                simbolo smb = buscarSmb(palabras[0]);
-                                String operacion = "";
-                                if (smb != null) {
-                                    for (String c: ctes) operacion += c;
+                            else { // Asign x = n1 + n2+ n3 ...
+                                String operacion = "", op1;
+                                for (int i = 2; i < palabras.length-1; i++) operacion += palabras[i] + " ";
+                                String[] posfijo = arbolDeExpresion.infijo_posfijo(operacion);
+                                
+                                for (String l : posfijo) { // Generar codigo en ensamblador de operacion
+                                    l = l.trim();
+                                    switch (l) {
+                                        case "+": // Sacar de la pila el valor y guardarlo
+                                            escritor.write("xor Cx, Cx\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Ch, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Cl, byte ptr [si]\n");
+                                            //Realizar la suma
+                                            escritor.write("mov dato" + cont + ", Cl\n");
+                                            escritor.write("add dato" + cont + ", Ch\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+
+                                        case "-": 
+                                            escritor.write("xor Cx, Cx\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Ch, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Cl, byte ptr [si]\n");
+                                            //Realizar la resta
+                                            escritor.write("mov dato" + cont + ", Cl\n");
+                                            escritor.write("sub dato" + cont + ", Ch\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+
+                                        case "*":
+                                            escritor.write("xor Ax, Ax\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Ah, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov AL, byte ptr [si]\n");
+                                            //Realizar la multiplicación
+                                            escritor.write("mul Ah\n");
+                                            escritor.write("mov dato" + cont + ", Al\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+                                            
+                                        case "/": 
+                                            escritor.write("xor Ax, Ax\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Bl, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Al, byte ptr [si]\n");
+                                            //Realizar la división
+                                            escritor.write("div Bl\n");
+                                            escritor.write("mov dato" + cont + ", Al\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+                                        case "mod": 
+                                            escritor.write("xor Ax, Ax\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Bl, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Al, byte ptr [si]\n");
+                                            //Realizar la división
+                                            escritor.write("div Bl\n");
+                                            escritor.write("mov dato" + cont + ", Ah\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+
+                                        case "div":
+                                            escritor.write("xor Ax, Ax\n");
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Bl, byte ptr [si]\n");
+                                            // Los registros aqui van al revés por la estructura de la pila
+                                            escritor.write("pop Dx\n");
+                                            escritor.write("mov si, dx\n");
+                                            escritor.write("mov Al, byte ptr [si]\n");
+                                            //Realizar la división
+                                            escritor.write("div Bl\n");
+                                            escritor.write("mov dato" + cont + ", Al\n");
+                                            escritor.write("push offset dato" + cont + "\n");
+                                            // Crear variable temporal
+                                            data.add("dato" + cont + " db 255 dup ('$')\n");
+                                            cont++;
+                                            break;
+
+                                        default: // OPERADOR. Guardar en la pila de ensamblador
+                                            if (Pattern.matches(cte,l)) { // constantes entran directamente
+                                                escritor.write("push " + l + "\n");
+                                            }
+                                            else {
+                                                escritor.write("xor Bx, Bx\n");
+                                                simbolo smb = buscarSmb(l);
+                                                if (smb != null) {
+                                                    if (smb.valor.equals("?")) // Si es una variable leida
+                                                        escritor.write("mov Bx, offset" + l + " + 2\n");
+                                                    else escritor.write("mov Bx, offset" + smb.valor + "\n"); // variable normal
+                                                    escritor.write("sub Bx, 30h\n"); // Realizar el ajuste antes de meter a la pila
+                                                    escritor.write("push Bx\n");
+                                                }
+                                            }
+                                    }
                                 }
-                                System.out.println(operacion);
-                            */}
+                                // cont-- es la última variable que guardó el resultado fina
+                                escritor.write("add dato" + (cont-1) + ", 30h\n"); // Ajuste
+                                escritor.write("mov dx, offset " + palabras[0] + "\n");
+                                escritor.write("mov si, dx\n");
+                                escritor.write("mov [si], offset dato" + (cont-1) + "\n"); //Asignar el resultado
+                                escritor.write("add [si], 30h\n");
+                                simbolo smb = buscarSmb(palabras[0]);
+                                if ( smb != null ) smb.valor = "!";
+                            }
                         }
                     }
                 }
@@ -652,7 +819,6 @@ public class Compilador {
                 System.out.println(e);
             }
         }
-
-        //for (simbolo smb: tabSim) System.out.printf("tipo: %s, nombre: %s, valor: %s \n", smb.tipo, smb.nombre, smb.valor);
+for (simbolo smb: tabSim) System.out.printf("%s %s = %s \n", smb.tipo, smb.nombre, smb.valor);
     }
 }

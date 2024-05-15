@@ -3,41 +3,38 @@
 Inicio:
 mov Ax, @Data
 mov Ds, Ax 
-mov Ah, 9h
-mov Dx, Offset S
-int 21h
-mov Dx, Offset dato0
-int 21h
-mov Ah, 0Ah 
-mov Dx, Offset a
-int 21h
+push 2
+push 3
+xor Cx, Cx
+pop Dx
+mov si, dx
+mov Ch, byte ptr [si]
+pop Dx
+mov si, dx
+mov Cl, byte ptr [si]
+mov dato0, Cl
+add dato0, Ch
+push offset dato0
+add dato0, 30h
+mov dx, offset c
+mov si, dx
+mov [si], offset dato0
+add [si], 30h
 mov Ah, 9h
 mov Dx, Offset S
 int 21h
 mov Dx, Offset dato1
 int 21h
-mov Ah, 0Ah 
-mov Dx, Offset b
-int 21h
-mov Ah, 9h
-mov Dx, Offset S
-int 21h
-mov Dx, Offset dato2
-int 21h
-mov Ah, 9h
-mov Dx, Offset S
-int 21h
-mov Dx, Offset dato3
+mov Dx, Offset c
 int 21h
 mov Ah, 4Ch
 int 21h
 .DATA
 S db 10,13,24h
-dato0 db "Valor de a", 10,13,36
-a db 255,?,255
-dato1 db "Valor de b", 10,13,36
-b db 255,?,255
-dato2 db "La suma de ab es: 0", 10,13,36
-dato3 db "La resta de a - b es: 0", 10,13,36
+dato0 db 255 dup ('$')
+dato1 db "El resultado es: ", 36
+a db "", '$'
+b db "", '$'
+c db "!", '$'
 .STACK
 END Inicio
