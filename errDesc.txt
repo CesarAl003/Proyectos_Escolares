@@ -3,7 +3,6 @@ syn00 El bloque debe ser único
 syn01 Código fuera de bloque inicio / fin
 syn02 Error de sintaxis, verificar expresión
 syn03 ID declarado fuera del bloque de declaración
-syn04 
 syn05 El bloque de declaración debe ir justo después del inicnio
 syn06 Comillas faltantes
 sem00 Bloque no fue cerrado correctamente
